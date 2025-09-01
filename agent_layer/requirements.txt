@@ -1,0 +1,6 @@
+langchain
+openai
+requests
+python-dotenv
+google-auth-oauthlib
+langchain_community
