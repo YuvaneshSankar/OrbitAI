@@ -1,64 +1,46 @@
 from langchain.vectorstores import Chroma
+from langchain.chains import ConversationalRetrievalChain
 from langchain.llms import OpenAI
 from langchain.memory import ConversationBufferMemory
-from langchain.schema import Document
+from langchain.schema import BaseRetriever, Document
 from typing import List
 
-#dummy instances of chroma db 
+# Custom retriever combining two retrievers and performing combined retrieval/truncation
+class CombinedRetriever(BaseRetriever):
+    def __init__(self, retrievers: List[BaseRetriever], max_docs_per_source: int = 3):
+        self.retrievers = retrievers
+        self.max_docs_per_source = max_docs_per_source
+
+    def get_relevant_documents(self, query: str) -> List[Document]:
+        combined_docs = []
+        for retriever in self.retrievers:
+            docs = retriever.get_relevant_documents(query)[: self.max_docs_per_source]
+            combined_docs.extend(docs)
+        return combined_docs
+
 def get_personal_chroma_retriever() -> Chroma:
-    return Chroma(persist_directory="./personal_chroma")  
+    return Chroma(persist_directory="./personal_chroma")
 
 def get_external_chroma_retriever() -> Chroma:
-    # Placeholder for external knowledge vector DB
-    return Chroma(persist_directory="./external_chroma") 
-
-class AgenticRAGWithChroma:
-    def __init__(self, personal_db: Chroma, external_db: Chroma, llm_model: OpenAI):
-        self.personal_retriever = personal_db.as_retriever(search_kwargs={"k": 5})
-        self.external_retriever = external_db.as_retriever(search_kwargs={"k": 5})
-        self.llm = llm_model
-        self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    def dynamic_retrieval(self, query: str, max_docs_per_source=3) -> List[Document]:
-        # Retrieve documents from both vector DBs
-        personal_docs = self.personal_retriever.get_relevant_documents(query)[:max_docs_per_source]
-        external_docs = self.external_retriever.get_relevant_documents(query)[:max_docs_per_source]
-        all_docs = personal_docs + external_docs
-        return all_docs[:max_docs_per_source]  # limit total number of documents passed to LLM
-
-    def generate_answer(self, user_query: str) -> str:
-        chat_history = self.memory.load_memory_variables({}).get("chat_history", [])
-        context_text = ""
-        for msg in chat_history:
-            role = msg.type.capitalize()
-            content = msg.content
-            context_text += f"{role}: {content}\n"
-
-        docs = self.dynamic_retrieval(f"{context_text} {user_query}")
-
-        prompt = (
-            "You are a helpful assistant. Use the following documents to answer the question.\n\n"
-            f"User Question:\n{user_query}\n\n"
-            "Relevant Documents:\n"
-            + "\n".join([doc.page_content for doc in docs])
-            + "\n\nAnswer:"
-        )
-        answer = self.llm(prompt)
-
-        # Update chat history memory
-        self.memory.chat_memory.add_user_message(user_query)
-        self.memory.chat_memory.add_ai_message(answer)
-
-        return answer
+    return Chroma(persist_directory="./external_chroma")
 
 def main():
-    personal_chroma = get_personal_chroma_retriever()
-    external_chroma = get_external_chroma_retriever()
+    personal_retriever = get_personal_chroma_retriever().as_retriever(search_kwargs={"k": 5})
+    external_retriever = get_external_chroma_retriever().as_retriever(search_kwargs={"k": 5})
+
+    combined_retriever = CombinedRetriever([personal_retriever, external_retriever], max_docs_per_source=3)
+
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     llm = OpenAI(temperature=0)
 
-    rag_system = AgenticRAGWithChroma(personal_chroma, external_chroma, llm)
+    # LangChain ConversationalRetrievalChain uses retriever and memory internally
+    rag_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=combined_retriever,
+        memory=memory,
+        return_source_documents=False,
+    )
 
-    # Simulated event loop for receiving repeated queries from the frontend
     termination_signal = False
     while not termination_signal:
         user_query = input("Enter your query (or 'exit' to quit): ").strip()
@@ -66,11 +48,10 @@ def main():
             termination_signal = True
             continue
 
-        # Process user query: dynamic retrieval + LLM generation + memory update
-        answer = rag_system.generate_answer(user_query)
+        result = rag_chain.run(user_query)
 
-        #write answer back to frontend
-        print(answer)
+        # write ans to frontend using axios
+        print(result)
 
 if __name__ == "__main__":
     main()
