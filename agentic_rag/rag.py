@@ -1,88 +1,97 @@
-from langchain.vectorstores import Chroma
+from dotenv import load_dotenv
+import os
+from typing import List, Any
+from pydantic import BaseModel, Field
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
 from langchain.chains import ConversationalRetrievalChain
-from langchain.llms import OpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseRetriever, Document
-from typing import List
-import heapq
 
-class CombinedRetriever(BaseRetriever):
-    def __init__(self, retrievers: List[BaseRetriever], llm: OpenAI, max_docs_per_source: int = 3, top_k_after_rerank: int = 3):
-        self.retrievers = retrievers
-        self.llm = llm
-        self.max_docs_per_source = max_docs_per_source
-        self.top_k_after_rerank = top_k_after_rerank
+load_dotenv()
 
-    def _score_doc(self, query: str, doc: Document) -> float:
-        prompt = (
-            f"Rate the relevance of the following document to the query on a scale of 1 to 5 (5=most relevant):\n\n"
-            f"Query: {query}\n\nDocument:\n{doc.page_content}\n\nScore:"
-        )
-        score_str = self.llm(prompt).strip()
-        try:
-            score = float(score_str)
-        except ValueError:
-            score = 0.0  # fallback if parsing fails
-        return score
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX = os.getenv("PINECONE_INDEX")
 
-    def get_relevant_documents(self, query: str) -> List[Document]:
-        combined_docs = []
-        for retriever in self.retrievers:
-            docs = retriever.get_relevant_documents(query)[: self.max_docs_per_source]
-            combined_docs.extend(docs)
+os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
 
-        # Rerank using LLM scores (descending order)
-        scored_docs = []
-        for doc in combined_docs:
-            score = self._score_doc(query, doc)
-            heapq.heappush(scored_docs, (-score, doc))
+class SimpleRetriever(BaseRetriever, BaseModel):
+    retriever: BaseRetriever = Field(...)
+    llm: Any = Field(...)
 
-        top_docs = []
-        for _ in range(min(self.top_k_after_rerank, len(scored_docs))):
-            top_docs.append(heapq.heappop(scored_docs)[1])
+    class Config:
+        arbitrary_types_allowed = True
 
-        return top_docs
+    def _get_relevant_documents(self, query: str) -> List[Document]:
+        # Get more documents since they're fragmented
+        docs = self.retriever.get_relevant_documents(query, k=100)
+        
+        # Group and combine related fragments
+        combined_content = []
+        seen_content = set()
+        
+        for doc in docs:
+            content = doc.page_content.strip()
+            if (len(content) > 10 and 
+                content not in seen_content and
+                not content.startswith('"')):
+                combined_content.append(content)
+                seen_content.add(content)
+        
+        # Create a single comprehensive document
+        if combined_content:
+            full_content = " | ".join(combined_content[:20])  # Take top 20 fragments
+            combined_doc = Document(
+                page_content=full_content,
+                metadata={"source": "combined", "type": "aggregated"}
+            )
+            print(f"Combined content preview: {full_content[:500]}...")
+            return [combined_doc]
+        
+        return docs[:5]  # Fallback to original docs
 
-
-def get_personal_chroma_retriever() -> Chroma:
-    return Chroma(persist_directory="./personal_chroma")
-
-
-def get_external_chroma_retriever() -> Chroma:
-    return Chroma(persist_directory="./external_chroma")
-
+def get_retriever():
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small", api_key=OPENAI_API_KEY)
+    base_retriever = PineconeVectorStore.from_existing_index(
+        index_name=PINECONE_INDEX,
+        embedding=embeddings,
+    ).as_retriever(search_kwargs={"k": 250})
+    
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, api_key=OPENAI_API_KEY)
+    return SimpleRetriever(retriever=base_retriever, llm=llm)
 
 def main():
-    llm = OpenAI(temperature=0)
-
-    personal_retriever = get_personal_chroma_retriever().as_retriever(search_kwargs={"k": 5})
-    external_retriever = get_external_chroma_retriever().as_retriever(search_kwargs={"k": 5})
-
-    combined_retriever = CombinedRetriever(
-        [personal_retriever, external_retriever], llm=llm, max_docs_per_source=5, top_k_after_rerank=3
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, api_key=OPENAI_API_KEY)
+    retriever = get_retriever()
+    memory = ConversationBufferMemory(
+        memory_key="chat_history", 
+        return_messages=True,
+        output_key="answer"
     )
-
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
+    
     rag_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=combined_retriever,
+        retriever=retriever,
         memory=memory,
-        return_source_documents=False,
+        return_source_documents=True,
     )
 
-    termination_signal = False
-    while not termination_signal:
-        user_query = input("Enter your query (or 'exit' to quit): ").strip()
-        if user_query.lower() == "exit":
-            termination_signal = True
-            continue
+    while True:
+        query = input("Enter your query (or 'exit' to quit): ").strip()
+        if query.lower() == "exit":
+            break
 
-
-        result = rag_chain.run(user_query)
-        #write to frontend
-        print(result)
-
+        try:
+            result = rag_chain({"question": query})
+            print("\nRetrieved content:")
+            for i, doc in enumerate(result.get("source_documents", [])):
+                print(f"[Doc {i+1}]: {doc.page_content[:400]}...\n")
+            print("Answer:", result["answer"])
+        except Exception as e:
+            print(f"Error: {e}")
+        
+        print("\n" + "-" * 50 + "\n")
 
 if __name__ == "__main__":
     main()

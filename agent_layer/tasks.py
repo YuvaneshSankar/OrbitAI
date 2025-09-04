@@ -1,4 +1,3 @@
-
 from agents import PlannerAgent, ResearchAgent, SummarizerAgent
 
 def run_planner_events(user_id, access_token):
@@ -18,9 +17,17 @@ def run_research_news_search(query="technology"):
 
 def run_summarizer_suggestions(events, tasks, news):
     summarizer = SummarizerAgent()
+    # Convert lists into plain text strings
+    events_text = "\n".join(events)
+    tasks_text = "\n".join(tasks)
+    news_text = "\n".join(news)
+
     prompt = (
-        "Based on the following events, tasks and news, provide 3-4 personalized suggestions for the user:\n"
-        f"Events: {events}\nTasks: {tasks}\nNews: {news}"
+        f"Based on the following events:\n{events_text}\n\n"
+        f"and these tasks:\n{tasks_text}\n\n"
+        f"and these news headlines:\n{news_text}\n\n"
+        "Provide 3-4 actionable personalized suggestions as bullet points."
     )
+
     suggestions = summarizer.summarize_to_list(prompt)
     return suggestions
