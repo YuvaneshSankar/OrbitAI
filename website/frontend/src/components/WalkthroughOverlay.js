@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useWalkthrough } from '../contexts/WalkthroughContext';
 
 const WalkthroughOverlay = () => {
@@ -17,6 +17,50 @@ const WalkthroughOverlay = () => {
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
   const currentStepData = steps[currentStep];
+
+  // OrbitAI Logo SVG (compact version)
+  const orbitAILogoSVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <style>
+        .orbit-ring { fill: none; stroke: currentColor; stroke-width: 2.5; }
+        .orbit-node { fill: currentColor; }
+        .center-node { fill: currentColor; }
+      </style>
+    </defs>
+    
+    <!-- Outer Ring -->
+    <circle cx="50" cy="50" r="40" class="orbit-ring"/>
+    
+    <!-- Inner hexagonal structure -->
+    <g transform="translate(50,50)">
+      <!-- Central node -->
+      <circle cx="0" cy="0" r="4" class="center-node"/>
+      
+      <!-- Hexagon connection lines -->
+      <line x1="0" y1="0" x2="0" y2="-20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="17.3" y2="-10" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="17.3" y2="10" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="0" y2="20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="-17.3" y2="10" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="-17.3" y2="-10" class="orbit-ring"/>
+      
+      <!-- Outer hexagon connections -->
+      <line x1="0" y1="-20" x2="17.3" y2="-10" class="orbit-ring"/>
+      <line x1="17.3" y1="-10" x2="17.3" y2="10" class="orbit-ring"/>
+      <line x1="17.3" y1="10" x2="0" y2="20" class="orbit-ring"/>
+      <line x1="0" y1="20" x2="-17.3" y2="10" class="orbit-ring"/>
+      <line x1="-17.3" y1="10" x2="-17.3" y2="-10" class="orbit-ring"/>
+      <line x1="-17.3" y1="-10" x2="0" y2="-20" class="orbit-ring"/>
+      
+      <!-- Outer nodes -->
+      <circle cx="0" cy="-20" r="3" class="orbit-node"/>
+      <circle cx="17.3" cy="-10" r="3" class="orbit-node"/>
+      <circle cx="17.3" cy="10" r="3" class="orbit-node"/>
+      <circle cx="0" cy="20" r="3" class="orbit-node"/>
+      <circle cx="-17.3" cy="10" r="3" class="orbit-node"/>
+      <circle cx="-17.3" cy="-10" r="3" class="orbit-node"/>
+    </g>
+  </svg>`;
 
   useEffect(() => {
     if (isActive && currentStepData?.target) {
@@ -132,7 +176,10 @@ const WalkthroughOverlay = () => {
           {/* Header */}
           <div className="flex items-start justify-between mb-3 sm:mb-4">
             <div className="flex items-center space-x-2">
-              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 flex-shrink-0" />
+              <div 
+                className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 flex-shrink-0"
+                dangerouslySetInnerHTML={{ __html: orbitAILogoSVG }}
+              />
               <h3 className="font-semibold text-foreground text-sm sm:text-base">{currentStepData.title}</h3>
             </div>
             <button
