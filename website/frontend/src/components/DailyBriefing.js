@@ -1,22 +1,63 @@
-import React, { useRef, useEffect } from 'react';
-import { X, Calendar, CheckSquare, Newspaper, Lightbulb, Download, FileText } from 'lucide-react';
-import { mockData } from '../mock';
+import React, { useRef, useEffect, useState } from 'react';
+import { X, Calendar, CheckSquare, Newspaper, Lightbulb, Download, FileText, Loader2, AlertCircle } from 'lucide-react';
+import axios from 'axios';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+
+// Configure axios base URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+});
 
 const DailyBriefing = ({ onClose }) => {
   const contentRef = useRef(null);
   const scrollRef = useRef(null);
+  const [briefingData, setBriefingData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Auto-scroll to top when modal opens
+  // Auto-scroll to top when modal opens and fetch briefing data
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
     }
+    fetchBriefingData();
   }, []);
 
+  const fetchBriefingData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Fetching daily briefing...');
+      const response = await api.get('/daily_briefing');
+      
+      console.log('Briefing data received:', response.data);
+      setBriefingData(response.data);
+      
+    } catch (error) {
+      console.error('Error fetching daily briefing:', error);
+      
+      let errorMessage = 'Failed to load daily briefing.';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (error.response) {
+        errorMessage = `Server error (${error.response.status}): ${error.response.data?.detail || 'Please try again.'}`;
+      } else if (error.request) {
+        errorMessage = 'Unable to connect to the server. Please check your connection.';
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const exportToPDF = async () => {
-    if (!contentRef.current) return;
+    if (!contentRef.current || !briefingData) return;
 
     try {
       // Create a temporary container with better styling for PDF
@@ -24,7 +65,7 @@ const DailyBriefing = ({ onClose }) => {
       tempDiv.style.position = 'absolute';
       tempDiv.style.left = '-9999px';
       tempDiv.style.width = '800px';
-      tempDiv.style.backgroundColor = 'white';
+      tempDiv.style.backgroundColor = '#000000';
       tempDiv.style.padding = '40px';
       tempDiv.style.fontFamily = 'Arial, sans-serif';
       
@@ -32,21 +73,41 @@ const DailyBriefing = ({ onClose }) => {
       const clonedContent = contentRef.current.cloneNode(true);
       
       // Style the cloned content for PDF
-      clonedContent.style.color = '#000';
+      clonedContent.style.color = '#ffffff';
       const sections = clonedContent.querySelectorAll('.space-y-3');
       sections.forEach(section => {
         section.style.marginBottom = '30px';
         section.style.pageBreakInside = 'avoid';
+        section.style.color = '#ffffff';
       });
       
-      // Add title
+      // Create header with logo and title
+      const headerContainer = document.createElement('div');
+      headerContainer.style.display = 'flex';
+      headerContainer.style.flexDirection = 'column';
+      headerContainer.style.alignItems = 'center';
+      headerContainer.style.justifyContent = 'center';
+      headerContainer.style.marginBottom = '30px';
+      headerContainer.style.gap = '10px';
+      
+      // Add logo (PNG image) - First line
+      const logoImg = document.createElement('img');
+      logoImg.src = '/logo.png';
+      logoImg.style.width = '48px';
+      logoImg.style.height = '48px';
+      logoImg.style.objectFit = 'contain';
+      
+      // Add title - Second line
       const title = document.createElement('h1');
-      title.textContent = 'Daily Briefing';
+      title.textContent = 'OrbitAI - Daily Briefing';
       title.style.fontSize = '24px';
       title.style.fontWeight = 'bold';
-      title.style.marginBottom = '30px';
+      title.style.color = '#ffffff';
+      title.style.margin = '0';
       title.style.textAlign = 'center';
-      title.style.color = '#000';
+      
+      headerContainer.appendChild(logoImg);
+      headerContainer.appendChild(title);
       
       const date = document.createElement('p');
       date.textContent = new Date().toLocaleDateString('en-US', { 
@@ -57,16 +118,16 @@ const DailyBriefing = ({ onClose }) => {
       });
       date.style.textAlign = 'center';
       date.style.marginBottom = '40px';
-      date.style.color = '#666';
+      date.style.color = '#cccccc';
       
-      tempDiv.appendChild(title);
+      tempDiv.appendChild(headerContainer);
       tempDiv.appendChild(date);
       tempDiv.appendChild(clonedContent);
       document.body.appendChild(tempDiv);
       
       // Generate canvas
       const canvas = await html2canvas(tempDiv, {
-        backgroundColor: '#ffffff',
+        backgroundColor: '#000000',
         scale: 2,
         logging: false,
         useCORS: true
@@ -101,6 +162,8 @@ const DailyBriefing = ({ onClose }) => {
   };
 
   const exportToMarkdown = () => {
+    if (!briefingData) return;
+    
     const date = new Date().toLocaleDateString('en-US', { 
       weekday: 'long', 
       year: 'numeric', 
@@ -113,28 +176,28 @@ const DailyBriefing = ({ onClose }) => {
     
     // Events section
     markdown += `## 📅 Today's Events\n\n`;
-    mockData.briefing.events.forEach(event => {
+    briefingData.sections.events.forEach(event => {
       markdown += `- ${event}\n`;
     });
     markdown += `\n`;
     
     // Tasks section
     markdown += `## ✅ Priority Tasks\n\n`;
-    mockData.briefing.tasks.forEach(task => {
+    briefingData.sections.tasks.forEach(task => {
       markdown += `- [ ] ${task}\n`;
     });
     markdown += `\n`;
     
     // News section
     markdown += `## 📰 Top News\n\n`;
-    mockData.briefing.news.forEach(news => {
+    briefingData.sections.news.forEach(news => {
       markdown += `- ${news}\n`;
     });
     markdown += `\n`;
     
     // Suggestions section
     markdown += `## 💡 Suggestions\n\n`;
-    mockData.briefing.suggestions.forEach(suggestion => {
+    briefingData.sections.suggestions.forEach(suggestion => {
       markdown += `- ${suggestion}\n`;
     });
     markdown += `\n`;
@@ -195,79 +258,127 @@ const DailyBriefing = ({ onClose }) => {
           className="overflow-y-auto max-h-[calc(85vh-140px)] scroll-smooth" 
           style={{ scrollBehavior: 'smooth' }}
         >
-          <div ref={contentRef} className="p-6 space-y-6">
-            {/* Events Section */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                  <Calendar className="h-4 w-4 text-foreground" />
-                </div>
-                <h3 className="font-medium text-foreground">Today's Events</h3>
-              </div>
-              <div className="ml-10 space-y-2">
-                {mockData.briefing.events.map((event, index) => (
-                  <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100}ms` }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
-                    <span>{event}</span>
-                  </div>
-                ))}
+          {loading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-foreground mb-4" />
+                <p className="text-foreground font-medium">Loading your daily briefing...</p>
+                <p className="text-xs text-muted-foreground mt-2">This may take a moment if generating new content</p>
               </div>
             </div>
+          ) : error ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="text-center">
+                <AlertCircle className="h-8 w-8 mx-auto text-red-500 mb-4" />
+                <p className="text-foreground font-medium mb-2">Failed to load briefing</p>
+                <p className="text-xs text-muted-foreground mb-4">{error}</p>
+                <button
+                  onClick={fetchBriefingData}
+                  className="bg-foreground text-background hover:bg-foreground/90 font-medium py-2 px-4 rounded-lg transition-all duration-200"
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div ref={contentRef} className="p-6 space-y-6">
+              {/* Events Section */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                    <Calendar className="h-4 w-4 text-foreground" />
+                  </div>
+                  <h3 className="font-medium text-foreground">Today's Events</h3>
+                </div>
+                <div className="ml-10 space-y-2">
+                  {briefingData?.sections?.events?.length > 0 ? (
+                    briefingData.sections.events.map((event, index) => (
+                      <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100}ms` }}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
+                        <span>{event}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="ml-4 text-sm text-muted-foreground">
+                      <span>No events scheduled for today</span>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-            {/* Tasks Section */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                  <CheckSquare className="h-4 w-4 text-foreground" />
-                </div>
-                <h3 className="font-medium text-foreground">Priority Tasks</h3>
-              </div>
-              <div className="ml-10 space-y-2">
-                {mockData.briefing.tasks.map((task, index) => (
-                  <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100 + 200}ms` }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
-                    <span>{task}</span>
+              {/* Tasks Section */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                    <CheckSquare className="h-4 w-4 text-foreground" />
                   </div>
-                ))}
+                  <h3 className="font-medium text-foreground">Priority Tasks</h3>
+                </div>
+                <div className="ml-10 space-y-2">
+                  {briefingData?.sections?.tasks?.length > 0 ? (
+                    briefingData.sections.tasks.map((task, index) => (
+                      <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100 + 200}ms` }}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
+                        <span>{task}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="ml-4 text-sm text-muted-foreground">
+                      <span>No priority tasks for today</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Top News Section */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                  <Newspaper className="h-4 w-4 text-foreground" />
-                </div>
-                <h3 className="font-medium text-foreground">Top News</h3>
-              </div>
-              <div className="ml-10 space-y-2">
-                {mockData.briefing.news.map((newsItem, index) => (
-                  <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100 + 400}ms` }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
-                    <span>{newsItem}</span>
+              {/* Top News Section */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                    <Newspaper className="h-4 w-4 text-foreground" />
                   </div>
-                ))}
+                  <h3 className="font-medium text-foreground">Top News</h3>
+                </div>
+                <div className="ml-10 space-y-2">
+                  {briefingData?.sections?.news?.length > 0 ? (
+                    briefingData.sections.news.map((newsItem, index) => (
+                      <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100 + 400}ms` }}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
+                        <span>{newsItem}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="ml-4 text-sm text-muted-foreground">
+                      <span>No news available</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Suggestions Section */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                  <Lightbulb className="h-4 w-4 text-foreground" />
-                </div>
-                <h3 className="font-medium text-foreground">Suggestions</h3>
-              </div>
-              <div className="ml-10 space-y-2">
-                {mockData.briefing.suggestions.map((suggestion, index) => (
-                  <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100 + 600}ms` }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
-                    <span>{suggestion}</span>
+              {/* Suggestions Section */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                    <Lightbulb className="h-4 w-4 text-foreground" />
                   </div>
-                ))}
+                  <h3 className="font-medium text-foreground">Suggestions</h3>
+                </div>
+                <div className="ml-10 space-y-2">
+                  {briefingData?.sections?.suggestions?.length > 0 ? (
+                    briefingData.sections.suggestions.map((suggestion, index) => (
+                      <div key={index} className="flex items-start space-x-2 text-sm text-muted-foreground animate-in slide-in-from-left-1 duration-300" style={{ animationDelay: `${index * 100 + 600}ms` }}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-2 flex-shrink-0"></div>
+                        <span>{suggestion}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="ml-4 text-sm text-muted-foreground">
+                      <span>No suggestions available</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}
