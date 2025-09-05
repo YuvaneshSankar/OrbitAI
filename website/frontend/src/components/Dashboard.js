@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
 import { 
   User, 
   LogOut, 
@@ -9,12 +10,21 @@ import {
   PenTool,
   ChevronRight,
   CheckCircle2,
-  HelpCircle
+  HelpCircle,
+  Download,
+  X,
+  AlertCircle
 } from 'lucide-react';
 import DailyBriefing from './DailyBriefing';
 import ThemeToggle from './ThemeToggle';
 import { useWalkthrough } from '../contexts/WalkthroughContext';
-import { mockData } from '../mock';
+
+// Configure axios base URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000, // 30 seconds timeout for RAG processing
+});
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [showBriefing, setShowBriefing] = useState(false);
@@ -24,9 +34,70 @@ const Dashboard = ({ setIsAuthenticated }) => {
   const [note, setNote] = useState('');
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showLogoModal, setShowLogoModal] = useState(false);
   
   const { restartWalkthrough } = useWalkthrough();
   const chatContainerRef = useRef(null);
+
+  // OrbitAI Logo SVG
+  const orbitAISVG = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <style>
+        .orbit-ring { fill: none; stroke: currentColor; stroke-width: 3; }
+        .orbit-node { fill: currentColor; }
+        .center-node { fill: currentColor; }
+        .brand-text { font-family: 'Arial', sans-serif; font-weight: bold; }
+      </style>
+    </defs>
+    
+    <!-- Outer Ring -->
+    <circle cx="100" cy="100" r="80" class="orbit-ring"/>
+    
+    <!-- Inner hexagonal structure with nodes -->
+    <g transform="translate(100,100)">
+      <!-- Central node -->
+      <circle cx="0" cy="0" r="8" class="center-node"/>
+      
+      <!-- Hexagon connection lines -->
+      <line x1="0" y1="0" x2="0" y2="-40" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="34.6" y2="-20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="34.6" y2="20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="0" y2="40" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="-34.6" y2="20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="-34.6" y2="-20" class="orbit-ring"/>
+      
+      <!-- Outer hexagon connections -->
+      <line x1="0" y1="-40" x2="34.6" y2="-20" class="orbit-ring"/>
+      <line x1="34.6" y1="-20" x2="34.6" y2="20" class="orbit-ring"/>
+      <line x1="34.6" y1="20" x2="0" y2="40" class="orbit-ring"/>
+      <line x1="0" y1="40" x2="-34.6" y2="20" class="orbit-ring"/>
+      <line x1="-34.6" y1="20" x2="-34.6" y2="-20" class="orbit-ring"/>
+      <line x1="-34.6" y1="-20" x2="0" y2="-40" class="orbit-ring"/>
+      
+      <!-- Outer nodes -->
+      <circle cx="0" cy="-40" r="6" class="orbit-node"/>
+      <circle cx="34.6" cy="-20" r="6" class="orbit-node"/>
+      <circle cx="34.6" cy="20" r="6" class="orbit-node"/>
+      <circle cx="0" cy="40" r="6" class="orbit-node"/>
+      <circle cx="-34.6" cy="20" r="6" class="orbit-node"/>
+      <circle cx="-34.6" cy="-20" r="6" class="orbit-node"/>
+    </g>
+    
+    <!-- Brand text -->
+    <text x="100" y="160" text-anchor="middle" class="brand-text" style="font-size: 24px; fill: currentColor;">OrbitAI</text>
+  </svg>`;
+
+  const downloadSVG = () => {
+    const blob = new Blob([orbitAISVG], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'OrbitAI-Logo.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -41,23 +112,63 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   const handleQuerySubmit = async (e) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    if (!query.trim() || isThinking) return;
 
-    const userMessage = { type: 'user', text: query, timestamp: new Date() };
+    const userMessage = { 
+      type: 'user', 
+      text: query.trim(), 
+      timestamp: new Date() 
+    };
+    
     setChatMessages(prev => [...prev, userMessage]);
+    const currentQuery = query.trim();
     setQuery('');
     setIsThinking(true);
 
-    // Simulate thinking delay
-    setTimeout(() => {
+    try {
+      console.log('Sending query to backend:', currentQuery);
+      
+      const response = await api.post('/chat', {
+        query: currentQuery
+      });
+
+      console.log('Backend response:', response.data);
+
       const botResponse = { 
         type: 'bot', 
-        text: mockData.chatResponse, 
-        timestamp: new Date() 
+        text: response.data.response || 'Sorry, I received an empty response.',
+        timestamp: new Date(),
+        error: response.data.error || null
       };
+      
       setChatMessages(prev => [...prev, botResponse]);
+
+    } catch (error) {
+      console.error('Chat API error:', error);
+      
+      let errorMessage = 'Sorry, I encountered an error while processing your request.';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'The request timed out. Please try again with a simpler question.';
+      } else if (error.response) {
+        // Server responded with error status
+        errorMessage = `Server error (${error.response.status}): ${error.response.data?.detail || 'Please try again.'}`;
+      } else if (error.request) {
+        // Request made but no response received
+        errorMessage = 'Unable to connect to the server. Please check your connection.';
+      }
+
+      const errorResponse = { 
+        type: 'bot', 
+        text: errorMessage,
+        timestamp: new Date(),
+        isError: true
+      };
+      
+      setChatMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsThinking(false);
-    }, 1500);
+    }
   };
 
   const handleNoteSubmit = async (e) => {
@@ -82,9 +193,16 @@ const Dashboard = ({ setIsAuthenticated }) => {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex justify-between items-center h-14">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-foreground text-background flex items-center justify-center">
-                <span className="text-sm font-bold">S</span>
-              </div>
+              <button 
+                onClick={() => setShowLogoModal(true)}
+                className="w-10 h-10 rounded-lg bg-background border border-border flex items-center justify-center p-1 hover:scale-105 transition-transform duration-200 cursor-pointer"
+              >
+                <img 
+                  src="/logo.png" 
+                  alt="OrbitAI Logo" 
+                  className="w-full h-full object-contain"
+                />
+              </button>
               <h1 className="text-lg font-semibold text-foreground">Dashboard</h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -102,7 +220,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
                   <User className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <span className="text-sm font-medium text-foreground">John Doe</span>
+                <span className="text-sm font-medium text-foreground">Yuvanesh S</span>
               </div>
               <button
                 onClick={handleLogout}
@@ -200,7 +318,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               </div>
               <div>
                 <h3 className="font-semibold text-foreground">AI Assistant</h3>
-                <p className="text-sm text-muted-foreground">Ask anything you need help with</p>
+                <p className="text-sm text-muted-foreground">Ask about your emails, calendar, weather, and news</p>
               </div>
             </div>
           </div>
@@ -213,7 +331,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
           >
             {chatMessages.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-muted-foreground text-sm">Start a conversation by asking a question below</p>
+                <p className="text-muted-foreground text-sm mb-2">Start a conversation by asking a question below</p>
+                <p className="text-xs text-muted-foreground">Try: "What are my recent emails?" or "What's the weather today?"</p>
               </div>
             )}
             
@@ -227,10 +346,18 @@ const Dashboard = ({ setIsAuthenticated }) => {
                   className={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg text-sm ${
                     message.type === 'user'
                       ? 'bg-foreground text-background'
+                      : message.isError
+                      ? 'bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
                       : 'bg-muted text-foreground border border-border'
                   }`}
                 >
-                  <p>{message.text}</p>
+                  {message.isError && (
+                    <div className="flex items-center space-x-1 mb-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span className="text-xs font-medium">Error</span>
+                    </div>
+                  )}
+                  <p className="whitespace-pre-wrap">{message.text}</p>
                   <p className="text-xs opacity-60 mt-1">
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -247,7 +374,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
                       <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse delay-75"></div>
                       <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse delay-150"></div>
                     </div>
-                    <span className="text-xs text-muted-foreground">Thinking...</span>
+                    <span className="text-xs text-muted-foreground">Processing your request...</span>
                   </div>
                 </div>
               </div>
@@ -261,8 +388,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ask me anything..."
-                className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-lg placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/20 focus:border-foreground transition-all duration-200"
+                placeholder="Ask me about your emails, calendar, weather..."
+                disabled={isThinking}
+                className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-lg placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/20 focus:border-foreground transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
@@ -279,6 +407,43 @@ const Dashboard = ({ setIsAuthenticated }) => {
       {/* Daily Briefing Modal */}
       {showBriefing && (
         <DailyBriefing onClose={() => setShowBriefing(false)} />
+      )}
+
+      {/* Logo Modal */}
+      {showLogoModal && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-in fade-in-0 duration-300">
+          <div className="bg-card border border-border rounded-2xl p-8 max-w-md w-full animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-foreground">OrbitAI Logo</h3>
+              <button
+                onClick={() => setShowLogoModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors duration-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex justify-center mb-6">
+              <div 
+                className="w-48 h-48 text-foreground"
+                dangerouslySetInnerHTML={{ __html: orbitAISVG }}
+              />
+            </div>
+            
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                Click the button below to download the OrbitAI logo as SVG
+              </p>
+              <button
+                onClick={downloadSVG}
+                className="flex items-center space-x-2 bg-foreground text-background hover:bg-foreground/90 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 transform hover:translate-y-[-1px] active:translate-y-0 mx-auto"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download SVG</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
