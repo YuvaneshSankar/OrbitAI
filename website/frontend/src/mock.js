@@ -9,7 +9,7 @@ export const mockAuth = {
         user: {
           id: '1',
           email: email,
-          name: 'John Doe'
+          name: 'Yuvenesh S'
         },
         token: 'mock-jwt-token'
       };
