@@ -1,5 +1,6 @@
 import tasks
 from datetime import datetime
+from debug_calendar import get_todays_calendar_events  # Import the function
 
 def save_briefing_to_md(filename: str, events: str, priority_tasks: str, news_weather: str, suggestions: str):
     today_date = datetime.now().strftime("%B %d, %Y")
@@ -41,7 +42,7 @@ class DailyBriefingCrew:
         print("🚀 Starting Daily Briefing Generation...")
         
         print("📅 Fetching calendar events...")
-        events = tasks.get_calendar_events()
+        events = get_todays_calendar_events()  # Use your working function instead
         
         print("✅ Fetching priority tasks...")
         priority_tasks = tasks.get_priority_tasks()
