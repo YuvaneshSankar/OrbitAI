@@ -1,11 +1,9 @@
-
 import tasks
 
 def save_briefing_to_md(filename: str, briefing_dict: dict):
     lines = []
     lines.append("# Daily Briefing\n")
-    lines.append("Your personalized overview for today\n")
-    lines.append("")
+    lines.append("Your personalized overview for today\n\n")
 
     if briefing_dict.get("events"):
         lines.append("## :calendar: Today's Events\n")
@@ -52,26 +50,30 @@ class CrewAIOrchestrator:
         print("Getting suggestions...")
         suggestions = tasks.run_summarizer_suggestions(events, tasks_list, news)
 
-        daily_briefing = {
+        briefing = {
             "events": events,
             "tasks": tasks_list,
             "news": news,
             "suggestions": suggestions,
         }
 
-        save_briefing_to_md("daily_briefing.md", daily_briefing)
-        return daily_briefing
+        save_briefing_to_md("daily_briefing.md", briefing)
+        print("Saved daily briefing to daily_briefing.md")
 
-# Only if you want CLI demo
+        return briefing
+
+# CLI demo if needed
 def main():
+    import os
     user_id = "user123"
-    access_token = "your_valid_google_calendar_access_token_here"
+    access_token = os.getenv("GOOGLE_CALENDAR_ACCESS_TOKEN")
     crew = CrewAIOrchestrator(user_id, access_token)
     briefing = crew.daily_workflow()
-    print("\n=== CrewAI Daily Briefing ===")
-    for key, section in briefing.items():
-        print(f"\n{key.capitalize()}:\n")
-        for item in section:
+
+    print("\n=== Daily Briefing ===")
+    for section, items in briefing.items():
+        print(f"\n{section.capitalize()}:")
+        for item in items:
             print("-", item)
 
 if __name__ == "__main__":

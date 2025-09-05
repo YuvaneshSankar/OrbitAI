@@ -21,13 +21,24 @@ class FetchCalendarEventsTool(BaseTool):
     description: str = "Fetch calendar events using a valid OAuth access token."
 
     def _run(self, access_token: str) -> str:
+        print(f"[DEBUG] Using Google Calendar Access Token: {access_token[:20]}...")  # Debug token partial
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
         headers = {"Authorization": f"Bearer {access_token.strip()}"}
         params = {"maxResults": 50, "orderBy": "startTime", "singleEvents": "true"}
+
         r = requests.get(url, headers=headers, params=params)
         r.raise_for_status()
         events = r.json()
-        return f"Fetched {len(events.get('items', []))} events."
+
+        # Format event list with summary and start time
+        lines = []
+        for event in events.get("items", []):
+            start = event.get("start", {})
+            start_str = start.get("dateTime") or start.get("date") or "Unknown time"
+            summary = event.get("summary", "No Title")
+            lines.append(f"{summary} at {start_str}")
+
+        return "\n".join(lines) if lines else "No events found."
 
     async def _arun(self, access_token: str) -> str:
         raise NotImplementedError("Async not implemented.")
@@ -41,7 +52,9 @@ class FetchTasksTool(BaseTool):
         r = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers)
         r.raise_for_status()
         tasks = r.json()
-        return f"Fetched {len(tasks)} tasks."
+        # Format task list (assuming each task has 'content')
+        lines = [task.get("content", "Untitled task") for task in tasks]
+        return "\n".join(lines) if lines else "No tasks found."
 
     async def _arun(self, _input: str) -> str:
         raise NotImplementedError()
@@ -57,7 +70,7 @@ class SearchNewsTool(BaseTool):
         r.raise_for_status()
         articles = r.json().get("articles", [])
         titles = [a["title"] for a in articles]
-        return "Top news: " + "; ".join(titles)
+        return "\n".join(titles) if titles else "No news found."
 
     async def _arun(self, query: str) -> str:
         raise NotImplementedError()
@@ -73,4 +86,4 @@ class SummarizeTextTool(BaseTool):
     async def _arun(self, text: str) -> str:
         raise NotImplementedError()
 
-TOOLS = [FetchCalendarEventsTool(), FetchTasksTool(), SearchNewsTool(), SummarizeTextTool()]
+TOOLS = [FetchCalendarEventsTool(), FetchTasksTool(), SearchNewsTool(), SummarizeTextTool()]   
