@@ -33,58 +33,48 @@ class FetchCalendarEventsTool(BaseTool):
             ist = pytz.timezone('Asia/Kolkata')
             today = datetime.now(ist).date()
             
-            todays_events = []
+            # Extract unique calendar events
             unique_events = set()
+            all_events = []
             
-            # Extract calendar events from ALL records
             for record in collection.find():
-                for key, value in record.items():
-                    if key == '_id':
-                        continue
-                    
-                    # Calendar events are stored as FIELD NAMES starting with "calendar:"
-                    if key.startswith('calendar:') and 'id:' in key and len(key) > 50:
-                        # Extract event data from the key itself
-                        calendar_key = key.replace('calendar: ', '')
-                        
-                        # Parse the multiline event data
-                        lines = calendar_key.split('\n')
+                for key in record.keys():
+                    if key.startswith('calendar:') and 'name:' in key and 'start:' in key:
+                        # Parse calendar data from field name
+                        lines = key.replace('calendar: ', '').split('\n')
                         event_data = {}
                         
                         for line in lines:
-                            if ':' in line and len(line) > 3:
-                                parts = line.split(':', 1)
-                                if len(parts) == 2:
-                                    k = parts[0].strip()
-                                    v = parts[1].strip()
-                                    event_data[k] = v
+                            if ':' in line:
+                                k, v = line.split(':', 1)
+                                event_data[k.strip()] = v.strip()
                         
-                        # Check if this is a valid calendar event
+                        # Only process complete events
                         if 'name' in event_data and 'start' in event_data and 'id' in event_data:
                             event_id = event_data['id']
-                            event_name = event_data['name']
-                            start_time_str = event_data['start']
-                            
-                            # Skip duplicates
-                            if event_id in unique_events:
-                                continue
-                            unique_events.add(event_id)
-                            
-                            try:
-                                # Parse the datetime with timezone awareness
-                                event_dt = parser.parse(start_time_str)
-                                event_dt_ist = event_dt.astimezone(ist)
-                                
-                                # Check if this event is for today
-                                if event_dt_ist.date() == today:
-                                    time_str = event_dt_ist.strftime("%I:%M %p")
-                                    todays_events.append(f"• {event_name} at {time_str}")
-                                    
-                            except Exception as e:
-                                # Fallback: check string date match
-                                today_str = today.strftime("%Y-%m-%d")
-                                if today_str in start_time_str:
-                                    todays_events.append(f"• {event_name}")
+                            if event_id not in unique_events:
+                                unique_events.add(event_id)
+                                all_events.append(event_data)
+            
+            # Filter for today's events
+            todays_events = []
+            for event in all_events:
+                start_str = event.get('start', '')
+                name = event.get('name', 'Unnamed Event')
+                
+                try:
+                    # Parse datetime and check if it's today
+                    dt = parser.parse(start_str)
+                    dt_ist = dt.astimezone(ist)
+                    
+                    if dt_ist.date() == today:
+                        time_str = dt_ist.strftime("%I:%M %p")
+                        todays_events.append(f"• {name} at {time_str}")
+                except Exception:
+                    # Fallback: simple string check for today's date
+                    today_str = today.strftime("%Y-%m-%d")
+                    if today_str in start_str:
+                        todays_events.append(f"• {name}")
             
             if not todays_events:
                 return "No calendar events found for today."
@@ -98,7 +88,7 @@ class FetchCalendarEventsTool(BaseTool):
         raise NotImplementedError()
 
 class FetchNotionTasksTool(BaseTool):
-    name: str = "fetch_notion_tasks"
+    name: str = "fetch_notion_tasks" 
     description: str = "Fetch priority tasks from Notion page."
 
     def _run(self, _input: str = None) -> str:
@@ -194,7 +184,7 @@ class GenerateSuggestionsTool(BaseTool):
             
             Guidelines for suggestions:
             1. For meetings: Suggest follow-ups, preparation tips, or related actions
-            2. For tasks: Provide study tips, optimal timing, or resource recommendations
+            2. For tasks: Provide study tips, optimal timing, or resource recommendations  
             3. Weather-related: Suggest best times for outdoor activities or precautions
             4. News-related: Connect current events to user's tasks/meetings if relevant
             
