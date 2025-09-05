@@ -7,13 +7,15 @@ from pymongo import MongoClient
 from langchain.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
+from dateutil import parser
+import pytz
 
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MONGODB_URL = os.getenv("MONGODB_URL")
 NOTION_API_TOKEN = os.getenv("NOTION_API_TOKEN")
-NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")  # This is actually your Page ID
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
 llm = ChatOpenAI(api_key=OPENAI_API_KEY, temperature=0.7)
 
@@ -27,34 +29,67 @@ class FetchCalendarEventsTool(BaseTool):
             db = client["OrbitAI"]
             collection = db["OrbitAI"]
             
-            today = datetime.now().strftime("%Y-%m-%d")
-            events = []
+            # Get today's date in IST
+            ist = pytz.timezone('Asia/Kolkata')
+            today = datetime.now(ist).date()
             
-            # Extract calendar events from MongoDB
+            todays_events = []
+            unique_events = set()
+            
+            # Extract calendar events from ALL records
             for record in collection.find():
                 for key, value in record.items():
-                    if 'calendar' in key.lower() or 'event' in key.lower() or 'meeting' in key.lower():
-                        if isinstance(value, str) and len(value) > 10:
-                            events.append(value)
+                    if key == '_id':
+                        continue
+                    
+                    # Calendar events are stored as FIELD NAMES starting with "calendar:"
+                    if key.startswith('calendar:') and 'id:' in key and len(key) > 50:
+                        # Extract event data from the key itself
+                        calendar_key = key.replace('calendar: ', '')
+                        
+                        # Parse the multiline event data
+                        lines = calendar_key.split('\n')
+                        event_data = {}
+                        
+                        for line in lines:
+                            if ':' in line and len(line) > 3:
+                                parts = line.split(':', 1)
+                                if len(parts) == 2:
+                                    k = parts[0].strip()
+                                    v = parts[1].strip()
+                                    event_data[k] = v
+                        
+                        # Check if this is a valid calendar event
+                        if 'name' in event_data and 'start' in event_data and 'id' in event_data:
+                            event_id = event_data['id']
+                            event_name = event_data['name']
+                            start_time_str = event_data['start']
+                            
+                            # Skip duplicates
+                            if event_id in unique_events:
+                                continue
+                            unique_events.add(event_id)
+                            
+                            try:
+                                # Parse the datetime with timezone awareness
+                                event_dt = parser.parse(start_time_str)
+                                event_dt_ist = event_dt.astimezone(ist)
+                                
+                                # Check if this event is for today
+                                if event_dt_ist.date() == today:
+                                    time_str = event_dt_ist.strftime("%I:%M %p")
+                                    todays_events.append(f"• {event_name} at {time_str}")
+                                    
+                            except Exception as e:
+                                # Fallback: check string date match
+                                today_str = today.strftime("%Y-%m-%d")
+                                if today_str in start_time_str:
+                                    todays_events.append(f"• {event_name}")
             
-            if not events:
+            if not todays_events:
                 return "No calendar events found for today."
             
-            # Use LLM to format events with IST timings
-            prompt = f"""
-            Extract and format today's calendar events from this data: {events[:5]}
-            
-            Requirements:
-            - Only show events for today ({today})
-            - Convert all times to IST (Indian Standard Time)
-            - Format as: "Event Name at HH:MM AM/PM"
-            - If no specific time, show as "Event Name (All day)"
-            - Maximum 5 events
-            - One event per line
-            """
-            
-            response = llm([HumanMessage(content=prompt)])
-            return response.content
+            return "\n".join(todays_events)
             
         except Exception as e:
             return f"Error fetching calendar events: {str(e)}"
@@ -74,7 +109,6 @@ class FetchNotionTasksTool(BaseTool):
                 "Notion-Version": "2022-06-28"
             }
             
-            # Use NOTION_DATABASE_ID as the page ID (since you stored it that way)
             page_id = NOTION_DATABASE_ID
             url = f"https://api.notion.com/v1/blocks/{page_id}/children"
             response = requests.get(url, headers=headers)
@@ -85,20 +119,19 @@ class FetchNotionTasksTool(BaseTool):
             data = response.json()
             tasks = []
             
-            # Extract text from numbered_list_item and paragraph blocks
             for block in data.get("results", []):
                 if block.get("type") == "numbered_list_item":
                     rich_text = block.get("numbered_list_item", {}).get("rich_text", [])
                     for text_obj in rich_text:
                         content = text_obj.get("plain_text", "").strip()
                         if content:
-                            tasks.append(content)
+                            tasks.append(f"• {content}")
                 elif block.get("type") == "paragraph":
                     rich_text = block.get("paragraph", {}).get("rich_text", [])
                     for text_obj in rich_text:
                         content = text_obj.get("plain_text", "").strip()
                         if content:
-                            tasks.append(content)
+                            tasks.append(f"• {content}")
                             
             return "\n".join(tasks) if tasks else "No tasks found in Notion page."
             
@@ -126,9 +159,9 @@ class FetchNewsAndWeatherTool(BaseTool):
             
             # Format news
             news_items = []
-            for article in news_data.get('articles', [])[:3]:
+            for article in news_data.get('articles', [])[:2]:
                 title = article.get('title', 'No title')
-                news_items.append(title)
+                news_items.append(f"• {title}")
             
             # Format weather
             current_weather = weather_data.get('current', {})
@@ -136,24 +169,11 @@ class FetchNewsAndWeatherTool(BaseTool):
             humidity = current_weather.get('relative_humidity_2m', 'N/A')
             wind = current_weather.get('wind_speed_10m', 'N/A')
             
-            weather_summary = f"Temperature: {temp}°C, Humidity: {humidity}%, Wind: {wind} m/s"
+            weather_info = f"• Temperature: {temp}°C, Humidity: {humidity}%, Wind: {wind} m/s"
             
-            # Use LLM to format news and weather
-            prompt = f"""
-            Format this news and weather data:
-            
-            News headlines: {news_items}
-            Weather: {weather_summary}
-            
-            Requirements:
-            - Show 2 most important news items as bullet points
-            - Add 1-2 weather-related bullet points
-            - Keep it concise and relevant
-            - Focus on actionable information
-            """
-            
-            response = llm([HumanMessage(content=prompt)])
-            return response.content
+            # Combine news and weather
+            result = news_items + [weather_info]
+            return "\n".join(result)
             
         except Exception as e:
             return f"Error fetching news and weather: {str(e)}"
@@ -165,9 +185,8 @@ class GenerateSuggestionsTool(BaseTool):
     name: str = "generate_suggestions"
     description: str = "Generate personalized suggestions based on events, tasks, news, and weather."
 
-    def _run(self, input_data: str) -> str:  # Changed to single input parameter
+    def _run(self, input_data: str) -> str:
         try:
-            # The input_data should be a formatted string with all the information
             prompt = f"""
             Based on the following information, generate 3-4 personalized actionable suggestions:
             
@@ -197,6 +216,5 @@ class GenerateSuggestionsTool(BaseTool):
 
     async def _arun(self, input_data: str) -> str:
         raise NotImplementedError()
-
 
 TOOLS = [FetchCalendarEventsTool(), FetchNotionTasksTool(), FetchNewsAndWeatherTool(), GenerateSuggestionsTool()]
