@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Download, X } from 'lucide-react';
 import { mockAuth } from '../mock';
 import { useWalkthrough } from '../contexts/WalkthroughContext';
 import ThemeToggle from './ThemeToggle';
@@ -14,8 +14,69 @@ const LoginSignup = ({ setIsAuthenticated }) => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showLogoModal, setShowLogoModal] = useState(false);
   
   const { hasCompletedWalkthrough, startWalkthrough } = useWalkthrough();
+
+  // OrbitAI Logo SVG
+  const orbitAISVG = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <style>
+        .orbit-ring { fill: none; stroke: currentColor; stroke-width: 3; }
+        .orbit-node { fill: currentColor; }
+        .center-node { fill: currentColor; }
+        .brand-text { font-family: 'Arial', sans-serif; font-weight: bold; }
+      </style>
+    </defs>
+    
+    <!-- Outer Ring -->
+    <circle cx="100" cy="100" r="80" class="orbit-ring"/>
+    
+    <!-- Inner hexagonal structure with nodes -->
+    <g transform="translate(100,100)">
+      <!-- Central node -->
+      <circle cx="0" cy="0" r="8" class="center-node"/>
+      
+      <!-- Hexagon connection lines -->
+      <line x1="0" y1="0" x2="0" y2="-40" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="34.6" y2="-20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="34.6" y2="20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="0" y2="40" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="-34.6" y2="20" class="orbit-ring"/>
+      <line x1="0" y1="0" x2="-34.6" y2="-20" class="orbit-ring"/>
+      
+      <!-- Outer hexagon connections -->
+      <line x1="0" y1="-40" x2="34.6" y2="-20" class="orbit-ring"/>
+      <line x1="34.6" y1="-20" x2="34.6" y2="20" class="orbit-ring"/>
+      <line x1="34.6" y1="20" x2="0" y2="40" class="orbit-ring"/>
+      <line x1="0" y1="40" x2="-34.6" y2="20" class="orbit-ring"/>
+      <line x1="-34.6" y1="20" x2="-34.6" y2="-20" class="orbit-ring"/>
+      <line x1="-34.6" y1="-20" x2="0" y2="-40" class="orbit-ring"/>
+      
+      <!-- Outer nodes -->
+      <circle cx="0" cy="-40" r="6" class="orbit-node"/>
+      <circle cx="34.6" cy="-20" r="6" class="orbit-node"/>
+      <circle cx="34.6" cy="20" r="6" class="orbit-node"/>
+      <circle cx="0" cy="40" r="6" class="orbit-node"/>
+      <circle cx="-34.6" cy="20" r="6" class="orbit-node"/>
+      <circle cx="-34.6" cy="-20" r="6" class="orbit-node"/>
+    </g>
+    
+    <!-- Brand text -->
+    <text x="100" y="160" text-anchor="middle" class="brand-text" style="font-size: 24px; fill: currentColor;">OrbitAI</text>
+  </svg>`;
+
+  const downloadSVG = () => {
+    const blob = new Blob([orbitAISVG], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'OrbitAI-Logo.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -99,9 +160,16 @@ const LoginSignup = ({ setIsAuthenticated }) => {
         <div className="w-full max-w-sm">
           {/* Logo/Brand area */}
           <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-foreground text-background mb-4 transition-transform duration-200 hover:scale-105">
-              <span className="text-lg font-bold">S</span>
-            </div>
+            <button 
+              onClick={() => setShowLogoModal(true)}
+              className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-background border border-border mb-6 transition-transform duration-200 hover:scale-105 cursor-pointer"
+            >
+              <img 
+                src="/logo.png" 
+                alt="OrbitAI Logo" 
+                className="w-12 h-12 object-contain"
+              />
+            </button>
             <h1 className="text-2xl font-semibold text-foreground mb-2">
               {isLogin ? 'Welcome back' : 'Create your account'}
             </h1>
@@ -244,6 +312,43 @@ const LoginSignup = ({ setIsAuthenticated }) => {
           </div>
         </div>
       </div>
+
+      {/* Logo Modal */}
+      {showLogoModal && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6 z-50 animate-in fade-in-0 duration-300">
+          <div className="bg-card border border-border rounded-2xl p-8 max-w-md w-full animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-foreground">OrbitAI Logo</h3>
+              <button
+                onClick={() => setShowLogoModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors duration-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex justify-center mb-6">
+              <div 
+                className="w-48 h-48 text-foreground"
+                dangerouslySetInnerHTML={{ __html: orbitAISVG }}
+              />
+            </div>
+            
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                Click the button below to download the OrbitAI logo as SVG
+              </p>
+              <button
+                onClick={downloadSVG}
+                className="flex items-center space-x-2 bg-foreground text-background hover:bg-foreground/90 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 transform hover:translate-y-[-1px] active:translate-y-0 mx-auto"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download SVG</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
