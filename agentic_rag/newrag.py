@@ -209,66 +209,66 @@ def rag_chat(query: str):
         return "error"
 
 def main():
-    print("🚀 Starting RAG system with explicit database access prompt...")
+    print(" Starting RAG system with explicit database access prompt...")
     print("=" * 60)
     
     collector = DataCollector()
     
-    print("📥 Collecting all data...")
+    print(" Collecting all data...")
     email_cal_docs = collector.get_emails_and_calendar()
     weather_docs = collector.get_weather_data()
     news_docs = collector.get_news_data()
     
     all_documents = email_cal_docs + weather_docs + news_docs
-    print(f"✅ Total documents collected: {len(all_documents)}")
+    print(f" Total documents collected: {len(all_documents)}")
     
     # Show sample extracted content for debugging
-    print("\n📋 Sample extracted content:")
+    print("\n Sample extracted content:")
     for i, doc in enumerate(all_documents[:5]):
         print(f"{i+1}. [{doc.metadata['type']}]: {doc.page_content[:100]}...")
     
     if not all_documents:
-        print("❌ No documents found.")
+        print(" No documents found.")
         return
     
     rag = RAGSystem()
-    print("\n🧠 Creating vector database...")
+    print("\n Creating vector database...")
     rag.create_vectorstore(all_documents)
     
     print("⚡ Setting up QA chain...")
     qa_chain = rag.setup_qa_chain()
     
-    print("\n🎯 Ready! Ask questions about your emails, calendar, weather, and news.")
-    print("💡 Try: 'What are my recent emails from Coding Ninjas?'")
+    print("\n Ready! Ask questions about your emails, calendar, weather, and news.")
+    print(" Try: 'What are my recent emails from Coding Ninjas?'")
     print("Type 'quit' to exit")
     print("=" * 60)
     
     # Interactive mode with debugging
     while True:
-        query = input(f"\n💬 You: ").strip()
+        query = input(f"\n You: ").strip()
         
         if query.lower() == 'quit':
-            print("👋 Goodbye!")
+            print(" Goodbye!")
             break
         
         if not query:
             continue
         
         try:
-            print("🔍 Searching your database...")
+            print(" Searching your database...")
             
             # DEBUG: Show what's actually retrieved
             docs = rag.vectorstore.similarity_search(query, k=5)
-            print("📊 Retrieved from your database:")
+            print(" Retrieved from your database:")
             for i, doc in enumerate(docs):
                 print(f"   {i+1}. [{doc.metadata['type']}]: {doc.page_content[:120]}...")
             print("-" * 50)
             
             result = qa_chain.invoke({"query": query})
-            print(f"🤖 Assistant: {result['result']}")
+            print(f" Assistant: {result['result']}")
             
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f" Error: {e}")
         
         print("=" * 50)
 

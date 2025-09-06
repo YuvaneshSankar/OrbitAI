@@ -276,40 +276,40 @@ Answer:"""
         )
 
 def main():
-    print("🚀 Starting RAG system with enhanced calendar support...")
+    print(" Starting RAG system with enhanced calendar support...")
     print("=" * 60)
     
     collector = DataCollector()
     
-    print("📥 Collecting all data...")
+    print(" Collecting all data...")
     email_cal_docs = collector.get_emails_and_calendar()
     weather_docs = collector.get_weather_data()
     news_docs = collector.get_news_data()
     
     all_documents = email_cal_docs + weather_docs + news_docs
-    print(f"✅ Total documents collected: {len(all_documents)}")
+    print(f" Total documents collected: {len(all_documents)}")
     
     # Show calendar events specifically
     calendar_docs = [doc for doc in all_documents if doc.metadata.get('type') == 'calendar']
-    print(f"📅 Calendar events found: {len(calendar_docs)}")
+    print(f" Calendar events found: {len(calendar_docs)}")
     
     for i, doc in enumerate(calendar_docs):
         event_name = doc.metadata.get('event_name', 'Unknown Event')
         print(f"   {i+1}. {event_name}")
     
     if not all_documents:
-        print("❌ No documents found.")
+        print(" No documents found.")
         return
     
     rag = RAGSystem()
-    print("\n🧠 Creating vector database...")
+    print("\n Creating vector database...")
     rag.create_vectorstore(all_documents)
     
     print("⚡ Setting up QA chain...")
     qa_chain = rag.setup_qa_chain()
     
-    print("\n🎯 Ready! Now supports detailed calendar queries!")
-    print("💡 Try these:")
+    print("\n Ready! Now supports detailed calendar queries!")
+    print(" Try these:")
     print("   - 'Do I have work at 9 AM today?'")
     print("   - 'What meetings do I have today?'")
     print("   - 'Am I free around 8-9 AM?'")
@@ -318,31 +318,31 @@ def main():
     print("=" * 60)
     
     while True:
-        query = input(f"\n💬 You: ").strip()
+        query = input(f"\n You: ").strip()
         
         if query.lower() == 'quit':
-            print("👋 Goodbye!")
+            print(" Goodbye!")
             break
         
         if not query:
             continue
         
         try:
-            print("🔍 Searching your database...")
+            print(" Searching your database...")
             
             # Show relevant retrieved documents
             docs = rag.vectorstore.similarity_search(query, k=5)
-            print("📊 Retrieved from your database:")
+            print(" Retrieved from your database:")
             for i, doc in enumerate(docs):
                 doc_preview = doc.page_content[:120].replace('\n', ' ')
                 print(f"   {i+1}. [{doc.metadata['type']}]: {doc_preview}...")
             print("-" * 50)
             
             result = qa_chain.invoke({"query": query})
-            print(f"🤖 Assistant: {result['result']}")
+            print(f" Assistant: {result['result']}")
             
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f" Error: {e}")
         
         print("=" * 50)
 

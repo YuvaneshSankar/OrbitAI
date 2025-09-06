@@ -48,15 +48,15 @@ class DailyBriefingCrew:
         pass
 
     def run_daily_workflow(self):
-        print("🚀 Starting Daily Briefing Generation...")
+        print("Starting Daily Briefing Generation...")
         
-        print("📅 Fetching calendar events...")
+        print("Fetching calendar events...")
         events = get_todays_calendar_events()  # Use your working function instead
         
-        print("✅ Fetching priority tasks...")
+        print("Fetching priority tasks...")
         priority_tasks = tasks.get_priority_tasks()
         
-        print("📰 Fetching news and weather...")
+        print("Fetching news and weather...")
         news_weather = tasks.get_news_and_weather()
         
         print("💡 Generating suggestions...")
