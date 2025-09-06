@@ -5,21 +5,30 @@ from debug_calendar import get_todays_calendar_events  # Import the function
 def save_briefing_to_md(filename: str, events: str, priority_tasks: str, news_weather: str, suggestions: str):
     today_date = datetime.now().strftime("%B %d, %Y")
     
+    # Format events with bullet points
+    formatted_events = "\n".join([f"• {event}" for event in events.split('\n') if event.strip()])
+    
+    # Format tasks with bullet points  
+    formatted_tasks = "\n".join([f"• {task}" for task in priority_tasks.split('\n') if task.strip()])
+    
+    # Format news with dashes
+    formatted_news = "\n".join([f"- {news}" for news in news_weather.split('\n') if news.strip()])
+    
     content = f"""# Daily Briefing
 
 Your personalized overview for today
 
 ## 📅 Today's Events
 
-{events}
+{formatted_events}
 
 ## ✅ Priority Tasks
 
-{priority_tasks}
+{formatted_tasks}
 
 ## 📰 Top News
 
-{news_weather}
+{formatted_news}
 
 ## 💡 Suggestions
 

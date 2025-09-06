@@ -22,8 +22,7 @@ import { useWalkthrough } from '../contexts/WalkthroughContext';
 // Configure axios base URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000, // 30 seconds timeout for RAG processing
+  baseURL: API_BASE_URL
 });
 
 const Dashboard = ({ setIsAuthenticated }) => {
@@ -171,19 +170,50 @@ const Dashboard = ({ setIsAuthenticated }) => {
     }
   };
 
+  // Add this new function to handle the email sending
+  const handleSendNoteEmail = async () => {
+    try {
+      console.log('Sending note email with content:', note.trim());
+      
+      const response = await api.post('/notes_send_mail', { 
+        note: note.trim() 
+      });
+      
+      console.log('Mail send response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error sending note mail:', error.response?.data || error.message);
+      throw error;
+    }
+  };
+
+
+
+  // Replace the existing handleNoteSubmit with this updated version
   const handleNoteSubmit = async (e) => {
     e.preventDefault();
     if (!note.trim()) return;
 
     setIsSubmittingNote(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmittingNote(false);
+    try {
+      // Call the backend route to send the note via email
+      await handleSendNoteEmail();
+      
+      // Clear the note and show success
       setNote('');
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2000);
-    }, 600);
+    } catch (error) {
+      console.error('Failed to send note email:', error);
+      
+      // Optionally show error state to user
+      // You could add an error state similar to showSuccess
+      // setShowError(true);
+      // setTimeout(() => setShowError(false), 2000);
+    } finally {
+      setIsSubmittingNote(false);
+    }
   };
 
   return (

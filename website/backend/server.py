@@ -13,6 +13,11 @@ import sys
 import asyncio
 import subprocess
 import re
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+from email.mime.text import MIMEText
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -106,31 +111,45 @@ def parse_markdown_briefing(content: str) -> Dict[str, List[str]]:
         "news": [],
         "suggestions": []
     }
-    
+
     current_section = None
     lines = content.split('\n')
-    
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
-            
+
         if "📅 Today's Events" in line:
             current_section = "events"
+            continue
         elif "✅ Priority Tasks" in line:
             current_section = "tasks"
+            continue
         elif "📰 Top News" in line:
             current_section = "news"
+            continue
         elif "💡 Suggestions" in line:
             current_section = "suggestions"
-        elif line.startswith('- ') and current_section:
+            continue
+        elif line.startswith('## '):
+            current_section = None
+
+        # Parse bullets for events and tasks (•)
+        if current_section in ["events", "tasks"] and line.startswith('• '):
             item = line[2:].strip()
             if item:
                 sections[current_section].append(item)
+        # Parse bullets for news (-)
+        elif current_section == "news" and line.startswith('- '):
+            item = line[2:].strip()
+            if item:
+                sections[current_section].append(item)
+        # Parse suggestions (plain text paragraphs)
         elif current_section == "suggestions" and not line.startswith('#') and not line.startswith('*'):
             if line and not line.startswith('---'):
                 sections[current_section].append(line)
-    
+
     return sections
 
 @app.get("/")
@@ -169,15 +188,18 @@ async def get_daily_briefing(background_tasks: BackgroundTasks):
         
         if not briefing_file.exists():
             logger.info("Daily briefing file not found, generating...")
+            print("Daily briefing file not found, generating...")
             await generate_daily_briefing()
             
             if not briefing_file.exists():
+                print("Failed to generate daily briefing file.")
                 raise HTTPException(status_code=404, detail="Daily briefing could not be generated")
         
         with open(briefing_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
         sections = parse_markdown_briefing(content)
+        print("Parsed sections:", sections)
         mod_time = datetime.fromtimestamp(briefing_file.stat().st_mtime)
         last_generated = mod_time.strftime("%Y-%m-%d %H:%M:%S")
         
@@ -190,3 +212,52 @@ async def get_daily_briefing(background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"Error in daily briefing endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error retrieving daily briefing: {str(e)}")
+
+@app.post("/notes_send_mail")  # Changed from GET to POST
+async def send_mail(request: dict):
+    try:
+        logger.info("Sending mail...")
+        
+        # Get the note content from the request
+        note_content = request.get('note', 'No note content provided')
+        
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        sender_email = os.getenv('SENDER_EMAIL')
+        sender_password = os.getenv('SENDER_PASSWORD')
+        
+        msg = MIMEMultipart()
+        msg['From'] = "yuvanesh.skv@gmail.com"
+        msg['To'] = "yuvanesh.ykv@gmail.com"
+        msg['Subject'] = "Quick Note from OrbitAI"
+        
+        body = f"""
+        Hi there! 👋
+
+        You have a new quick note from OrbitAI:
+
+        📝 Note: {note_content}
+
+        Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+        Best regards,
+        Yuvaansh S
+        Orbit AI
+        """
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        text = msg.as_string()
+        server.sendmail(sender_email, "yuvanesh.ykv@gmail.com", text)  # ✅ Fixed line
+        server.quit()
+        logger.info("Email sent successfully")
+        
+        return {"message": "Note sent successfully", "note": note_content}
+        
+    except Exception as e:
+        logger.error(f"Error sending email: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error sending email: {str(e)}")
+

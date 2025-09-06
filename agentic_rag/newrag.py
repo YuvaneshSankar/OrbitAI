@@ -159,7 +159,7 @@ class RAGSystem:
     def setup_qa_chain(self):
         template = """You are a personal assistant with access to the user's emails, calendar, and other data stored in their database.
 
-IMPORTANT: Use ONLY the information provided in the context below. This data comes directly from the user's MongoDB database containing their emails, calendar events, and other personal information.
+IMPORTANT: Use ONLY the information provided in the context below. This data comes directly from the user's MongoDB database containing their emails, calendar events, and other personal information. YOUR CONTEXT IS ONLY THIS INFROMATION, DON'T TRY TO PLAY SMART BY ADDING YOUR DATA/
 
 Context from user's database:
 {context}
@@ -167,13 +167,13 @@ Context from user's database:
 User question: {question}
 
 Instructions:
-- Answer based on the provided context from the user's database
+- Answer based on the provided context from the user's database, and dont add details not present in the context.
 - If the context contains email information, provide the email details including content, sender, subject
 - If the context contains calendar information, provide the schedule details  
+- If the context contains news information, provide the news details
 - Be specific and detailed using the actual content from the context
-- Do NOT say "I don't have access" - you DO have access via the provided context
-- If no relevant information is in the context, then say "I couldn't find that specific information in your current data"
 - When showing emails, include the actual content and details from the context
+- Don't add this line in your answer: "I couldn't find that specific information in your current data.", or any variations of this meaning the same.
 
 Answer:"""
         
@@ -184,6 +184,29 @@ Answer:"""
             retriever=self.vectorstore.as_retriever(search_kwargs={"k": 15}),
             chain_type_kwargs={"prompt": prompt}
         )
+
+def rag_chat(query: str):
+    try:
+        collector = DataCollector()
+
+        email_cal_docs = collector.get_emails_and_calendar()
+        weather_docs = collector.get_weather_data()
+        news_docs = collector.get_news_data()
+
+        all_docs = email_cal_docs + weather_docs + news_docs
+
+        if not all_docs:
+            return "error"
+        
+        rag = RAGSystem()
+        rag.create_vectorstore(all_docs)
+        qa_chain = rag.setup_qa_chain()
+
+        result = qa_chain.invoke({"query": query})
+        return result['result']
+    except Exception as e:
+        print(f"RAG chat error: {e}")
+        return "error"
 
 def main():
     print("🚀 Starting RAG system with explicit database access prompt...")
